@@ -1,0 +1,91 @@
+name: Docker Compose smoke test
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose*.yml'
+      - 'install/docker/**'
+      - 'install/package.json'
+      - '.github/workflows/docker-compose.yml'
+  pull_request:
+    branches:
+      - master
+      - develop
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose*.yml'
+      - 'install/docker/**'
+      - 'install/package.json'
+      - '.github/workflows/docker-compose.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  smoke:
+    name: ${{ matrix.file }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Every profile, so each service definition in the main file gets started
+          - file: docker-compose.yml
+            args: --profile redis --profile postgres
+          - file: docker-compose-redis.yml
+          - file: docker-compose-pgsql.yml
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE: docker compose -f ${{ matrix.file }} ${{ matrix.args }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The runner user's uid can match the image's nodebb uid, which would hide
+      # volume permission bugs; real hosts usually don't match.
+      - name: Give bind-mount directories to another owner
+        run: sudo chown -R root:root .docker
+
+      - name: Start stack
+        run: $COMPOSE up -d --build
+
+      - name: Wait for NodeBB to answer
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:4567/; then
+              echo "NodeBB answered after ~$((i * 5))s"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "NodeBB did not answer on :4567 within 300s"
+          exit 1
+
+      - name: Check no container is restarting
+        run: |
+          failed=0
+          for id in $($COMPOSE ps -aq); do
+            read -r name state restarts < <(docker inspect -f '{{.Name}} {{.State.Status}} {{.RestartCount}}' "$id")
+            echo "$name: $state, restarts=$restarts"
+            if [ "$state" != running ] || [ "$restarts" != 0 ]; then
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Container logs
+        if: always()
+        run: $COMPOSE logs --no-color
+
+      - name: Stop stack
+        if: always()
+        run: $COMPOSE down -v
