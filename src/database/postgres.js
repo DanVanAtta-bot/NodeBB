@@ -388,7 +388,7 @@ postgresModule.info = async function (db) {
 	const res = await db.query(`
 		SELECT true "postgres",
 		   current_setting('server_version') "version",
-			 EXTRACT(EPOCH FROM NOW() - pg_postmaster_start_time()) * 1000 "uptime"
+			 FLOOR(EXTRACT(EPOCH FROM NOW() - pg_postmaster_start_time())) "uptime"
 	`);
 	return {
 		...res.rows[0],
