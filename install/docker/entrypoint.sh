@@ -212,9 +212,23 @@ install_additional_plugins() {
   fi
 }
 
+# When started as root, give mounted volumes to $USER and re-exec as $USER.
+# Bind mounts arrive owned by the host user, which the unprivileged user can't chown.
+drop_privileges() {
+  if [ "$(id -u)" = '0' ]; then
+    local dir
+    for dir in "$CONFIG_DIR" /usr/src/app/build /usr/src/app/public/uploads; do
+      mkdir -p "$dir"
+      find "$dir" \! -user "$USER" -exec chown "$USER:$USER" '{}' +
+    done
+    exec gosu "$USER" "$0" "$@"
+  fi
+}
+
 # Main function
 main() {
   set_defaults
+  drop_privileges "$@"
   check_directory "$CONFIG_DIR"
   copy_or_link_files /usr/src/app "$CONFIG_DIR" "$PACKAGE_MANAGER"
   install_dependencies

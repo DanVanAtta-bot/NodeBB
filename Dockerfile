@@ -23,7 +23,8 @@ RUN cp /usr/src/app/install/package.json /usr/src/app/
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive \
     apt-get -y --no-install-recommends install \
-        tini
+        tini \
+        gosu
 
 RUN groupadd --gid ${GID} ${USER} \
     && useradd --uid ${UID} --gid ${GID} --home-dir /usr/src/app/ --shell /bin/bash ${USER} \
@@ -54,7 +55,7 @@ RUN corepack enable \
     && chown -R ${USER}:${USER} /usr/src/app/ /opt/config/
 
 COPY --from=build --chown=${USER}:${USER} /usr/src/app/ /usr/src/app/install/docker/setup.json /usr/src/app/
-COPY --from=build --chown=${USER}:${USER} /usr/bin/tini /usr/src/app/install/docker/entrypoint.sh /usr/local/bin/
+COPY --from=build /usr/bin/tini /usr/sbin/gosu /usr/src/app/install/docker/entrypoint.sh /usr/local/bin/
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && chmod +x /usr/local/bin/tini
@@ -62,7 +63,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
 # TODO: Have docker-compose use environment variables to create files like setup.json and config.json.
 # COPY --from=hairyhenderson/gomplate:stable /gomplate /usr/local/bin/gomplate
 
-USER ${USER}
+# Starts as root so entrypoint.sh can fix volume ownership, then drops to ${USER} via gosu
 
 EXPOSE 4567
 
