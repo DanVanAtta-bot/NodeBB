@@ -42,11 +42,6 @@ volumes:
       device: ./.docker/database/postgresql/data
 
   redis-data:
-    driver: local
-    driver_opts:
-      o: bind
-      type: none
-      device: ./.docker/database/redis
 
   nodebb-build:
     driver: local
